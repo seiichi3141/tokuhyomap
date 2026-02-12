@@ -1,0 +1,13 @@
+apikey.txt
+mapbox.txt
+config.js
+.claude/
+data/hokkaido_tohoku.json
+data/kanto.json
+data/tokai_kinki.json
+data/kyushu.json
+data/data_sources.json
+data/nikkei_data2026.tsv
+data/nikkei_suggest.tsv
+data/city.geojson
+all_candidates_events.json

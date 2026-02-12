@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>チームみらい 得票率マップ × 街頭演説</title>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; }
+#map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+
+#header {
+  position: absolute; top: 10px; left: 10px; z-index: 1;
+  background: rgba(255,255,255,0.95); border-radius: 8px;
+  padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  max-width: 360px;
+}
+#header h1 { font-size: 16px; margin-bottom: 4px; color: #1a1a2e; }
+#header p { font-size: 11px; color: #666; line-height: 1.4; }
+
+#legend {
+  position: absolute; bottom: 30px; left: 10px; z-index: 1;
+  background: rgba(255,255,255,0.95); border-radius: 8px;
+  padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  font-size: 12px;
+}
+#legend h3 { font-size: 13px; margin-bottom: 8px; }
+.legend-section { margin-bottom: 10px; }
+.legend-section:last-child { margin-bottom: 0; }
+.legend-label { font-weight: bold; margin-bottom: 4px; color: #333; }
+.gradient-bar {
+  width: 200px; height: 14px; border-radius: 3px;
+  background: linear-gradient(to right, #f7fbff, #c6dbef, #6baed6, #2171b5, #08306b);
+  margin-bottom: 2px;
+}
+.gradient-labels { display: flex; justify-content: space-between; font-size: 10px; color: #666; width: 200px; }
+.marker-legend { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.marker-dot {
+  width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff;
+  box-shadow: 0 0 2px rgba(0,0,0,0.4); flex-shrink: 0;
+}
+
+#controls {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  background: rgba(255,255,255,0.95); border-radius: 8px;
+  padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  font-size: 12px; max-width: 220px;
+}
+#controls h3 { font-size: 13px; margin-bottom: 8px; }
+.control-group { margin-bottom: 8px; }
+.control-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 2px 0; }
+.control-group input[type="checkbox"] { cursor: pointer; }
+
+#info-panel {
+  position: absolute; top: 10px; right: 240px; z-index: 1;
+  background: rgba(255,255,255,0.95); border-radius: 8px;
+  padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  font-size: 12px; display: none; max-width: 280px;
+}
+#info-panel h3 { font-size: 14px; margin-bottom: 6px; }
+.info-row { display: flex; justify-content: space-between; padding: 2px 0; }
+.info-label { color: #666; }
+.info-value { font-weight: bold; }
+.info-highlight { color: #2171b5; font-size: 18px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="header">
+  <h1>チームみらい 得票率 × 街頭演説マップ</h1>
+  <p>2026年衆院選 比例代表の市区町村別得票率（青のグラデーション）に、街頭演説の実施箇所（赤い点）を重ねて表示</p>
+</div>
+
+<div id="legend">
+  <h3>凡例</h3>
+  <div class="legend-section">
+    <div class="legend-label">チームみらい得票率</div>
+    <div class="gradient-bar"></div>
+    <div class="gradient-labels"><span>0%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span></div>
+  </div>
+  <div class="legend-section">
+    <div class="legend-label">街頭演説</div>
+    <div class="marker-legend"><div class="marker-dot" style="background:#e63946;"></div> 小選挙区候補</div>
+    <div class="marker-legend"><div class="marker-dot" style="background:#ff9f1c;"></div> 比例区候補</div>
+    <div class="marker-legend"><div class="marker-dot" style="background:#7209b7;"></div> 党首（安野たかひろ）</div>
+  </div>
+</div>
+
+<div id="controls">
+  <h3>表示切替</h3>
+  <div class="control-group">
+    <label><input type="checkbox" id="toggle-choropleth" checked> 得票率マップ</label>
+    <label><input type="checkbox" id="toggle-events" checked> 街頭演説</label>
+    <label><input type="checkbox" id="toggle-pref" checked> 都道府県境界</label>
+  </div>
+  <div class="control-group" style="margin-top: 8px;">
+    <div style="font-weight:bold; margin-bottom:4px;">候補者タイプ</div>
+    <label><input type="checkbox" id="toggle-single" checked> 小選挙区</label>
+    <label><input type="checkbox" id="toggle-proportional" checked> 比例区</label>
+    <label><input type="checkbox" id="toggle-leader" checked> 党首</label>
+  </div>
+</div>
+
+<div id="info-panel">
+  <h3 id="info-title"></h3>
+  <div class="info-row"><span class="info-label">得票率</span><span class="info-value info-highlight" id="info-rate"></span></div>
+  <div class="info-row"><span class="info-label">得票数</span><span class="info-value" id="info-votes"></span></div>
+  <div class="info-row"><span class="info-label">総投票数</span><span class="info-value" id="info-total"></span></div>
+</div>
+
+<script src="config.js"></script>
+<script>
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/light-v11',
+  language: 'ja',
+  center: [137.0, 37.0],
+  zoom: 5,
+  minZoom: 4,
+  maxZoom: 15
+});
+
+map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+map.on('load', async () => {
+  // Load data
+  const [cityRes, prefRes, eventsRes] = await Promise.all([
+    fetch('data/city_with_votes.geojson').then(r => r.json()),
+    fetch('data/pref.geojson').then(r => r.json()),
+    fetch('data/speech_events.geojson').then(r => r.json())
+  ]);
+
+  // Add choropleth source & layer
+  map.addSource('cities', { type: 'geojson', data: cityRes });
+  map.addLayer({
+    id: 'city-fill',
+    type: 'fill',
+    source: 'cities',
+    paint: {
+      'fill-color': [
+        'interpolate', ['linear'], ['get', 'mirai_rate'],
+        0, '#f7fbff',
+        2, '#deebf7',
+        4, '#c6dbef',
+        6, '#9ecae1',
+        8, '#6baed6',
+        10, '#4292c6',
+        12, '#2171b5',
+        15, '#084594',
+        20, '#08306b'
+      ],
+      'fill-opacity': 0.75
+    }
+  });
+  map.addLayer({
+    id: 'city-line',
+    type: 'line',
+    source: 'cities',
+    paint: {
+      'line-color': '#ccc',
+      'line-width': 0.3
+    }
+  });
+
+  // Prefecture boundaries
+  map.addSource('prefs', { type: 'geojson', data: prefRes });
+  map.addLayer({
+    id: 'pref-line',
+    type: 'line',
+    source: 'prefs',
+    paint: {
+      'line-color': '#666',
+      'line-width': 1.2
+    }
+  });
+
+  // Speech events source & layers (split by type)
+  // Render order: single -> proportional -> leader (leader on top)
+  map.addSource('events', { type: 'geojson', data: eventsRes });
+
+  // Single district (bottom)
+  map.addLayer({
+    id: 'events-single',
+    type: 'circle',
+    source: 'events',
+    filter: ['==', ['get', 'type'], 'SINGLE'],
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 6],
+      'circle-color': '#e63946',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1,
+      'circle-opacity': 0.8
+    }
+  });
+
+  // Proportional (middle)
+  map.addLayer({
+    id: 'events-proportional',
+    type: 'circle',
+    source: 'events',
+    filter: ['==', ['get', 'type'], 'PROPORTIONAL'],
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 6],
+      'circle-color': '#ff9f1c',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1,
+      'circle-opacity': 0.8
+    }
+  });
+
+  // Party leader (top - slightly larger, subtle glow)
+  map.addLayer({
+    id: 'events-leader-glow',
+    type: 'circle',
+    source: 'events',
+    filter: ['==', ['get', 'type'], 'PARTY_LEADER'],
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 10],
+      'circle-color': '#7209b7',
+      'circle-opacity': 0.15,
+      'circle-stroke-width': 0
+    }
+  });
+  map.addLayer({
+    id: 'events-leader',
+    type: 'circle',
+    source: 'events',
+    filter: ['==', ['get', 'type'], 'PARTY_LEADER'],
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7],
+      'circle-color': '#7209b7',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1.5,
+      'circle-opacity': 0.9
+    }
+  });
+
+  // Hover info for choropleth
+  map.on('mousemove', 'city-fill', (e) => {
+    if (e.features.length > 0) {
+      const props = e.features[0].properties;
+      const panel = document.getElementById('info-panel');
+      panel.style.display = 'block';
+      document.getElementById('info-title').textContent =
+        (props.pref || props.KEN || '') + ' ' + (props.city || props.SIKUCHOSON || '');
+      document.getElementById('info-rate').textContent = (props.mirai_rate || 0) + '%';
+      document.getElementById('info-votes').textContent =
+        (props.mirai_votes || 0).toLocaleString() + '票';
+      document.getElementById('info-total').textContent =
+        (props.total_votes || 0).toLocaleString() + '票';
+      map.getCanvas().style.cursor = 'pointer';
+    }
+  });
+
+  map.on('mouseleave', 'city-fill', () => {
+    document.getElementById('info-panel').style.display = 'none';
+    map.getCanvas().style.cursor = '';
+  });
+
+  // Click popup for events
+  const eventLayers = ['events-leader', 'events-proportional', 'events-single'];
+  eventLayers.forEach(layerId => {
+    map.on('click', layerId, (e) => {
+      const props = e.features[0].properties;
+      const startDate = props.startAt ? new Date(props.startAt) : null;
+      const dateStr = startDate
+        ? `${startDate.getMonth()+1}/${startDate.getDate()} ${startDate.getHours()}:${String(startDate.getMinutes()).padStart(2,'0')}`
+        : '';
+
+      new mapboxgl.Popup({ offset: 10 })
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div style="font-size:13px;">
+            <strong>${props.candidate}</strong><br>
+            <span style="color:#666;">${props.location}</span><br>
+            <span style="color:#999;">${dateStr}</span>
+          </div>
+        `)
+        .addTo(map);
+    });
+
+    map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
+  });
+
+  // Toggle controls
+  document.getElementById('toggle-choropleth').addEventListener('change', (e) => {
+    const vis = e.target.checked ? 'visible' : 'none';
+    map.setLayoutProperty('city-fill', 'visibility', vis);
+    map.setLayoutProperty('city-line', 'visibility', vis);
+  });
+
+  document.getElementById('toggle-events').addEventListener('change', (e) => {
+    const vis = e.target.checked ? 'visible' : 'none';
+    eventLayers.forEach(l => map.setLayoutProperty(l, 'visibility', vis));
+    map.setLayoutProperty('events-leader-glow', 'visibility', vis);
+  });
+
+  document.getElementById('toggle-pref').addEventListener('change', (e) => {
+    map.setLayoutProperty('pref-line', 'visibility', e.target.checked ? 'visible' : 'none');
+  });
+
+  document.getElementById('toggle-single').addEventListener('change', (e) => {
+    map.setLayoutProperty('events-single', 'visibility', e.target.checked ? 'visible' : 'none');
+  });
+
+  document.getElementById('toggle-proportional').addEventListener('change', (e) => {
+    map.setLayoutProperty('events-proportional', 'visibility', e.target.checked ? 'visible' : 'none');
+  });
+
+  document.getElementById('toggle-leader').addEventListener('change', (e) => {
+    const vis = e.target.checked ? 'visible' : 'none';
+    map.setLayoutProperty('events-leader', 'visibility', vis);
+    map.setLayoutProperty('events-leader-glow', 'visibility', vis);
+  });
+});
+</script>
+</body>
+</html>
