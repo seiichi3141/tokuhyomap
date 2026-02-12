@@ -26,6 +26,8 @@ jobs:
         run: echo "const MAPBOX_TOKEN = '${{ secrets.MAPBOX_TOKEN }}';" > config.js
 
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
